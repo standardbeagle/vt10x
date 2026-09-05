@@ -1,3 +1,4 @@
+//go:build linux || darwin || dragonfly || solaris || openbsd || netbsd || freebsd
 // +build linux darwin dragonfly solaris openbsd netbsd freebsd
 
 package vt10x
@@ -49,7 +50,9 @@ func (t *terminal) Write(p []byte) (int, error) {
 				// not enough bytes for a full rune
 				return written - 1, nil
 			}
-			t.logln("invalid utf8 sequence")
+			if t.DebugLogger != nil {
+				t.logln("invalid utf8 sequence")
+			}
 			continue
 		}
 		t.put(c)
@@ -71,7 +74,9 @@ func (t *terminal) Parse(br *bufio.Reader) error {
 			return err
 		}
 		if c == unicode.ReplacementChar && sz == 1 {
-			t.logln("invalid utf8 sequence")
+			if t.DebugLogger != nil {
+				t.logln("invalid utf8 sequence")
+			}
 			break
 		}
 		if !locked {
