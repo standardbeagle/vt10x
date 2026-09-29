@@ -178,7 +178,7 @@ func (t *State) handleCSIPlain() {
 	default:
 		goto unknown
 	case '@': // ICH - insert <n> blank char
-		t.insertBlanks(c.arg(0, 1))
+		t.insertBlanks(c.maxarg(0, 1))
 	case 'A': // CUU - cursor <n> up
 		t.moveVertical(-c.maxarg(0, 1))
 	case 'B', 'e': // CUD, VPR - cursor <n> down
@@ -215,7 +215,7 @@ func (t *State) handleCSIPlain() {
 	case 'H', 'f': // CUP, HVP - move to <row> <col>
 		t.moveAbsTo(c.arg(1, 1)-1, c.arg(0, 1)-1)
 	case 'I': // CHT - cursor forward tabulation <n> tab stops
-		n := c.arg(0, 1)
+		n := c.maxarg(0, 1)
 		for i := 0; i < n; i++ {
 			t.putTab(true)
 		}
@@ -247,21 +247,21 @@ func (t *State) handleCSIPlain() {
 			t.clear(0, t.cur.Y, t.cols-1, t.cur.Y)
 		}
 	case 'S': // SU - scroll <n> lines up
-		t.scrollUp(t.top, c.arg(0, 1))
+		t.scrollUp(t.top, c.maxarg(0, 1))
 	case 'T': // SD - scroll <n> lines down
-		t.scrollDown(t.top, c.arg(0, 1))
+		t.scrollDown(t.top, c.maxarg(0, 1))
 	case 'L': // IL - insert <n> blank lines
-		t.insertBlankLines(c.arg(0, 1))
+		t.insertBlankLines(c.maxarg(0, 1))
 	case 'l': // RM - reset mode
 		t.setMode(false, false, c.args)
 	case 'M': // DL - delete <n> lines
-		t.deleteLines(c.arg(0, 1))
+		t.deleteLines(c.maxarg(0, 1))
 	case 'X': // ECH - erase <n> chars
-		t.clear(t.cur.X, t.cur.Y, t.cur.X+c.arg(0, 1)-1, t.cur.Y)
+		t.clear(t.cur.X, t.cur.Y, t.cur.X+c.maxarg(0, 1)-1, t.cur.Y)
 	case 'P': // DCH - delete <n> chars
-		t.deleteChars(c.arg(0, 1))
+		t.deleteChars(c.maxarg(0, 1))
 	case 'Z': // CBT - cursor backward tabulation <n> tab stops
-		n := c.arg(0, 1)
+		n := c.maxarg(0, 1)
 		for i := 0; i < n; i++ {
 			t.putTab(false)
 		}
