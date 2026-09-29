@@ -374,3 +374,14 @@ func TestEraseAboveClearsTheRowAboveRowOne(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteWithAutowrapOffConsumesAPendingWrap(t *testing.T) {
+	term := New(WithSize(3, 2))
+	feed(t, term, "abc\x1b[?7lx\x1b[?7hyz")
+	if got := cellDump(term, 0); got != "a|b|y" {
+		t.Errorf("row0 %q", got)
+	}
+	if got := cellDump(term, 1); got != "z" {
+		t.Errorf("row1 %q", got)
+	}
+}

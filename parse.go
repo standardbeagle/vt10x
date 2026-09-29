@@ -181,6 +181,8 @@ func (t *State) putCell(c rune, extra string, w int) {
 		t.cur.X = t.cols - 1
 		if t.mode&ModeWrap != 0 {
 			t.cur.State |= cursorWrapNext
+		} else {
+			t.cur.State &^= cursorWrapNext // left pending before autowrap was turned off
 		}
 	}
 }
