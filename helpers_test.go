@@ -16,13 +16,17 @@ func cursorAt(term Terminal) [2]int {
 	return [2]int{c.X, c.Y}
 }
 
-// rowText returns the text of row y.
+// rowText returns the text of row y with wide continuation cells skipped and
+// clusters expanded, so a wide character appears once.
 func rowText(term Terminal, y int) string {
 	cols, _ := term.Size()
 	var out []rune
 	for x := 0; x < cols; x++ {
 		g := term.Cell(x, y)
-		out = append(out, g.Char)
+		if g.IsWideContinuation() {
+			continue
+		}
+		out = append(out, []rune(g.Text())...)
 	}
 	return string(out)
 }
