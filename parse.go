@@ -64,6 +64,9 @@ func (t *State) printClusterRune(c rune) {
 	buf := utf8.AppendRune(t.clusterBuf[:0], c)
 	t.clusterBuf = buf
 	_, _, w, _ := uniseg.FirstGraphemeCluster(buf, -1)
+	if w == 0 && c >= 0x1F3FB && c <= 0x1F3FF {
+		w = 2 // a skin-tone modifier with no base is drawn as its own emoji
+	}
 	if w == 0 {
 		return // a lone mark or joiner: nothing to attach it to
 	}

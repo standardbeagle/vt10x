@@ -354,3 +354,23 @@ func TestAutowrapOffLeavesNoPendingWrap(t *testing.T) {
 		t.Errorf("cursor %v want %v", got, want)
 	}
 }
+
+func TestLoneSkinToneModifierIsAWideEmoji(t *testing.T) {
+	term := New(WithSize(6, 2))
+	feed(t, term, "🏽x")
+	if got := cellDump(term, 0); got != "🏽!|<c>|x" {
+		t.Fatalf("%q", got)
+	}
+}
+
+// ED 1 erases from the top of the screen through the cursor, including the row
+// directly above a cursor on row 1.
+func TestEraseAboveClearsTheRowAboveRowOne(t *testing.T) {
+	term := New(WithSize(5, 3))
+	feed(t, term, "aaaaa\r\nbbbbb\r\nccccc\x1b[2;3H\x1b[1J")
+	for y, want := range []string{"", "   bb", "ccccc"} {
+		if got := strings.TrimRight(rowText(term, y), " "); got != strings.TrimRight(want, " ") {
+			t.Errorf("row %d %q want %q", y, got, want)
+		}
+	}
+}
