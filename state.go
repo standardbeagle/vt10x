@@ -18,6 +18,8 @@ const (
 	attrItalic
 	attrBlink
 	attrWrap
+	attrWide     // first cell of a two-column character or cluster
+	attrWideCont // second cell of a two-column character or cluster
 )
 
 const (
@@ -62,10 +64,51 @@ const (
 	ChangedTitle
 )
 
+// Glyph is one cell of the screen.
+//
+// A cell holds one grapheme cluster: a base character plus any combining marks,
+// variation selectors, skin-tone modifiers or zero-width-joiner continuations
+// that belong with it. Char is the cluster's first rune, which is the whole
+// cluster for the common one-rune case; Extra holds the remaining runes.
+// Use Text to get the whole cluster.
+//
+// A cluster that is two columns wide (East Asian wide characters, emoji, most
+// ZWJ sequences, flags) occupies two adjacent cells. The first cell carries the
+// text and reports IsWide. The second is a continuation cell: it has no text
+// (Char is 0, Text is "") and reports IsWideContinuation. A renderer walking a
+// row must skip continuation cells; the terminal advances two columns for the
+// pair. The continuation carries the same colours as its first cell.
 type Glyph struct {
 	Char   rune
 	Mode   int16
 	FG, BG Color
+	// Extra is the rest of the cluster after Char, empty for a single-rune
+	// cell. It is set only on the first cell of a cluster.
+	Extra string
+}
+
+// Text returns the whole grapheme cluster in the cell, Char followed by Extra.
+// It is "" for a wide continuation cell and for a never-written cell.
+func (g Glyph) Text() string {
+	if g.Char == 0 {
+		return ""
+	}
+	if g.Extra == "" {
+		return string(g.Char)
+	}
+	return string(g.Char) + g.Extra
+}
+
+// IsWide reports whether the cell is the first of a two-column pair. The next
+// cell in the row is its continuation.
+func (g Glyph) IsWide() bool {
+	return g.Mode&attrWide != 0
+}
+
+// IsWideContinuation reports whether the cell is the second half of a wide
+// character. It has no text of its own; skip it when rendering.
+func (g Glyph) IsWideContinuation() bool {
+	return g.Mode&attrWideCont != 0
 }
 
 type line []Glyph
