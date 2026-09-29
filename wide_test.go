@@ -290,7 +290,7 @@ func TestInsertAndDeleteCharsNeverLeaveHalves(t *testing.T) {
 	check("世a\x1b[1G\x1b[P", " |a")       // head deleted: its continuation cannot stay
 	check("世a\x1b[2G\x1b[P", " |a")       // continuation deleted: head cleared
 	check("abc世\x1b[1G\x1b[@", " |a|b|c") // head pushed to last col loses its continuation
-	check("a世b\x1b[1G\x1b[2P", " | |b")   // deletes a and 世's head; continuation blanked
+	check("a世b\x1b[1G\x1b[2P", " |b")     // deletes a and 世's head; continuation blanked
 }
 
 func TestResizeNeverLeavesAHalfAtTheEdge(t *testing.T) {

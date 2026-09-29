@@ -1,5 +1,11 @@
 package vt10x
 
+import (
+	"unicode/utf8"
+
+	"github.com/rivo/uniseg"
+)
+
 func isControlCode(c rune) bool {
 	return c < 0x20 || c == 0177
 }
@@ -14,10 +20,126 @@ func (t *State) parse(c rune) {
 		}
 	}
 	// TODO: update selection; see st.c:2450
+	t.printRune(c)
+}
 
+// printRune puts one rune on the screen. Most runes are a whole one-column
+// character (printable ASCII, box drawing, Latin, CJK) and go straight to a new
+// cell. The rest -- combining marks, joiners, variation selectors, emoji,
+// regional indicators -- may belong to the cluster in the previous cell, which
+// only the grapheme segmenter can say, so they take the slower path.
+func (t *State) printRune(c rune) {
+	if t.prepend {
+		// The previous cluster ends in a Prepend character, which absorbs
+		// whatever comes next, ASCII included.
+		t.printClusterRune(c)
+		return
+	}
+	w := 1
+	if c > 0x7F {
+		if w = fastWidth(c); w == 0 {
+			t.printClusterRune(c)
+			return
+		}
+	}
+	t.putCell(c, "", w)
+}
+
+// printClusterRune handles a rune that may extend the newest cluster. If it
+// does, it is appended to that cell (widening it when the cluster grows to two
+// columns); otherwise it starts a new cell of the width the segmenter reports,
+// or is dropped when it has no width and nothing to attach to.
+func (t *State) printClusterRune(c rune) {
+	if t.joinOK {
+		cell := &t.lines[t.lastY][t.lastX]
+		buf := utf8.AppendRune(t.clusterBuf[:0], cell.Char)
+		buf = append(buf, cell.Extra...)
+		buf = utf8.AppendRune(buf, c)
+		t.clusterBuf = buf
+		if first, _, w, _ := uniseg.FirstGraphemeCluster(buf, -1); len(first) == len(buf) {
+			t.joinRune(cell, c, w)
+			return
+		}
+	}
+	buf := utf8.AppendRune(t.clusterBuf[:0], c)
+	t.clusterBuf = buf
+	_, _, w, _ := uniseg.FirstGraphemeCluster(buf, -1)
+	if w == 0 {
+		return // a lone mark or joiner: nothing to attach it to
+	}
+	if w > 2 {
+		w = 2
+	}
+	t.putCell(c, "", w)
+	t.prepend = t.endsInPrepend(c)
+}
+
+// endsInPrepend reports whether a cluster whose last rune is r swallows the
+// next rune. Prepend characters start at U+0600, which keeps the common
+// case off the segmenter.
+func (t *State) endsInPrepend(r rune) bool {
+	if r < 0x600 {
+		return false
+	}
+	buf := utf8.AppendRune(t.clusterBuf[:0], r)
+	buf = append(buf, 'a')
+	t.clusterBuf = buf
+	first, _, _, _ := uniseg.FirstGraphemeCluster(buf, -1)
+	return len(first) == len(buf)
+}
+
+// joinRune appends c to the cluster in cell and applies the cluster's new
+// width. A cluster only ever grows: a mark that would narrow it (VS15) is kept
+// in the text and the cell keeps its columns.
+func (t *State) joinRune(cell *Glyph, c rune, width int) {
+	cell.Extra += string(c)
+	t.changed |= ChangedScreen
+	t.dirty[t.lastY] = true
+	t.prepend = t.endsInPrepend(c)
+	if width < 2 || cell.Mode&attrWide != 0 || t.lastX+1 >= t.cols {
+		return
+	}
+	// One column grew to two: a regional-indicator pair, or VS16 on a text
+	// symbol. Take the next cell, which is where the cursor is, if there is one.
+	y, x := t.lastY, t.lastX
+	line := t.lines[y]
+	if line[x+1].Mode&(attrWide|attrWideCont) != 0 {
+		t.blankWidePair(y, x+1)
+	}
+	cell.Mode |= attrWide
+	cont := *cell
+	cont.Char, cont.Extra = 0, ""
+	cont.Mode = cont.Mode&^(attrWide|attrWrap) | attrWideCont
+	line[x+1] = cont
+	if x+2 < t.cols {
+		t.moveTo(x+2, y)
+	} else {
+		t.cur.X = t.cols - 1
+		t.cur.State |= cursorWrapNext
+	}
+}
+
+// putCell writes one cluster of the given width (1 or 2) at the cursor and
+// advances it. A wide cluster that does not fit in the last column wraps to the
+// next line first, or, with autowrap off, is dropped and leaves the column
+// blank, as xterm does.
+func (t *State) putCell(c rune, extra string, w int) {
 	if t.mode&ModeWrap != 0 && t.cur.State&cursorWrapNext != 0 {
 		t.lines[t.cur.Y][t.cur.X].Mode |= attrWrap
 		t.newline(true)
+	}
+	if w == 2 && t.cur.X == t.cols-1 {
+		if t.cols < 2 {
+			w = 1
+		} else {
+			t.blankCell(t.cur.Y, t.cur.X)
+			if t.mode&ModeWrap == 0 {
+				t.joinOK, t.prepend = false, false
+				return
+			}
+			t.lines[t.cur.Y][t.cur.X].Mode |= attrWrap
+			t.newline(true)
+		}
 	}
 
 	if t.mode&ModeInsert != 0 && t.cur.X+1 < t.cols {
@@ -27,10 +149,27 @@ func (t *State) parse(c rune) {
 		}
 	}
 
-	t.setChar(c, &t.cur.Attr, t.cur.X, t.cur.Y)
-	if t.cur.X+1 < t.cols {
-		t.moveTo(t.cur.X+1, t.cur.Y)
+	x, y := t.cur.X, t.cur.Y
+	if w == 2 {
+		if t.lines[y][x+1].Mode&(attrWide|attrWideCont) != 0 {
+			t.blankWidePair(y, x+1)
+		}
+		t.setChar(c, &t.cur.Attr, x, y)
+		head := &t.lines[y][x]
+		head.Mode |= attrWide
+		cont := *head
+		cont.Char = 0
+		cont.Mode = cont.Mode&^attrWide | attrWideCont
+		t.lines[y][x+1] = cont
 	} else {
+		t.setChar(c, &t.cur.Attr, x, y)
+	}
+	t.joinOK, t.lastX, t.lastY, t.prepend = true, x, y, false
+
+	if x+w < t.cols {
+		t.moveTo(x+w, y)
+	} else {
+		t.cur.X = t.cols - 1
 		t.cur.State |= cursorWrapNext
 	}
 }
