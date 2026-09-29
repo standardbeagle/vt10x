@@ -172,7 +172,10 @@ func (t *State) putCell(c rune, extra string, w int) {
 	t.joinOK, t.lastX, t.lastY, t.prepend = true, x, y, false
 
 	if x+w < t.cols {
-		t.moveTo(x+w, y)
+		// The row is already valid, so skip moveTo's clamping; setChar marked
+		// the screen changed.
+		t.cur.X = x + w
+		t.cur.State &^= cursorWrapNext
 	} else {
 		// At the right margin. With autowrap on the cursor waits there and the
 		// next character wraps; with it off there is nothing to wait for, so
