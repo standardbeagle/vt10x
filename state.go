@@ -413,6 +413,22 @@ func (t *State) clearAll() {
 	t.clear(0, 0, t.cols-1, t.rows-1)
 }
 
+// moveVertical moves the cursor dy rows (negative is up) the way xterm's
+// CUU/CUD do: a cursor inside the scroll region stops at the region's margin,
+// a cursor outside it stops at the screen edge. moveTo then applies the
+// origin-mode limits.
+func (t *State) moveVertical(dy int) {
+	y := t.cur.Y
+	lo, hi := 0, t.rows-1
+	if dy > 0 && y <= t.bottom {
+		hi = t.bottom
+	}
+	if dy < 0 && y >= t.top {
+		lo = t.top
+	}
+	t.moveTo(t.cur.X, clamp(y+dy, lo, hi))
+}
+
 func (t *State) moveAbsTo(x, y int) {
 	if t.cur.State&cursorOrigin != 0 {
 		y += t.top

@@ -105,6 +105,13 @@ func (t *State) parseEscCSI(c rune) {
 	if t.DebugLogger != nil {
 		t.logf("%q", string(c))
 	}
+	if c > 0x7F {
+		// Not a CSI byte. Truncating it to a byte would make U+0140 look like
+		// the final byte '@'; abandon the sequence and print the character.
+		t.state = t.parse
+		t.parse(c)
+		return
+	}
 	if t.csi.put(byte(c)) {
 		t.state = t.parse
 		t.handleCSI()
