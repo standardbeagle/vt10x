@@ -178,15 +178,15 @@ func (t *State) parseEsc(c rune) {
 	if t.handleControlCodes(c) {
 		return
 	}
-	next := t.parse
+	next := t.stateText
 	if t.DebugLogger != nil {
 		t.logf("%q", string(c))
 	}
 	switch c {
 	case '[':
-		next = t.parseEscCSI
+		next = t.stateCSI
 	case '#':
-		next = t.parseEscTest
+		next = t.stateEscTest
 	case 'P', // DCS - Device Control String
 		'_', // APC - Application Program Command
 		'^', // PM - Privacy Message
@@ -194,9 +194,9 @@ func (t *State) parseEsc(c rune) {
 		'k': // old title set compatibility
 		t.str.reset()
 		t.str.typ = c
-		next = t.parseEscStr
+		next = t.stateStr
 	case '(': // set primary charset G0
-		next = t.parseEscAltCharset
+		next = t.stateAltCharset
 	case ')', // set secondary charset G1 (ignored)
 		'*', // set tertiary charset G2 (ignored)
 		'+': // set quaternary charset G3 (ignored)
@@ -247,12 +247,12 @@ func (t *State) parseEscCSI(c rune) {
 	if c > 0x7F {
 		// Not a CSI byte. Truncating it to a byte would make U+0140 look like
 		// the final byte '@'; abandon the sequence and print the character.
-		t.state = t.parse
+		t.state = t.stateText
 		t.parse(c)
 		return
 	}
 	if t.csi.put(byte(c)) {
-		t.state = t.parse
+		t.state = t.stateText
 		t.handleCSI()
 	}
 }
@@ -263,9 +263,9 @@ func (t *State) parseEscStr(c rune) {
 	}
 	switch c {
 	case '\033':
-		t.state = t.parseEscStrEnd
+		t.state = t.stateStrEnd
 	case '\a': // backwards compatiblity to xterm
-		t.state = t.parse
+		t.state = t.stateText
 		t.handleSTR()
 	default:
 		t.str.put(c)
@@ -279,7 +279,7 @@ func (t *State) parseEscStrEnd(c rune) {
 	if t.DebugLogger != nil {
 		t.logf("%q", string(c))
 	}
-	t.state = t.parse
+	t.state = t.stateText
 	if c == '\\' {
 		t.handleSTR()
 	}
@@ -307,7 +307,7 @@ func (t *State) parseEscAltCharset(c rune) {
 			t.logf("unknown alt. charset '%c'\n", c)
 		}
 	}
-	t.state = t.parse
+	t.state = t.stateText
 }
 
 func (t *State) parseEscTest(c rune) {
@@ -322,7 +322,7 @@ func (t *State) parseEscTest(c rune) {
 			}
 		}
 	}
-	t.state = t.parse
+	t.state = t.stateText
 }
 
 func (t *State) handleControlCodes(c rune) bool {
@@ -350,7 +350,7 @@ func (t *State) handleControlCodes(c rune) bool {
 	// ESC
 	case 033:
 		t.csi.reset()
-		t.state = t.parseEsc
+		t.state = t.stateEsc
 	// SO, SI
 	case 016, 017:
 		// different charsets not supported. apps should use the correct

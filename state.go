@@ -139,12 +139,16 @@ type State struct {
 	top, bottom   int // scroll limits
 	mode          ModeFlag
 	state         parseState
-	str           strEscape
-	csi           csiEscape
-	numlock       bool
-	tabs          []bool
-	title         string
-	colorOverride map[Color]Color
+	// The parser states as method values, bound once. Assigning t.parseEsc
+	// afresh on every escape sequence allocated a closure each time.
+	stateText, stateEsc, stateCSI, stateEscTest parseState
+	stateStr, stateStrEnd, stateAltCharset      parseState
+	str                                         strEscape
+	csi                                         csiEscape
+	numlock                                     bool
+	tabs                                        []bool
+	title                                       string
+	colorOverride                               map[Color]Color
 
 	// Grapheme-cluster assembly. A cluster can arrive in pieces (a base
 	// character now, its combining mark or joiner in the next Write), so the
@@ -160,10 +164,18 @@ type State struct {
 }
 
 func newState(w io.Writer) *State {
-	return &State{
+	t := &State{
 		w:             w,
 		colorOverride: make(map[Color]Color),
 	}
+	t.stateText = t.parse
+	t.stateEsc = t.parseEsc
+	t.stateCSI = t.parseEscCSI
+	t.stateEscTest = t.parseEscTest
+	t.stateStr = t.parseEscStr
+	t.stateStrEnd = t.parseEscStrEnd
+	t.stateAltCharset = t.parseEscAltCharset
+	return t
 }
 
 func (t *State) logf(format string, args ...interface{}) {
