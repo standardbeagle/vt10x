@@ -115,7 +115,9 @@ func (t *State) joinRune(cell *Glyph, c rune, width int) {
 		t.moveTo(x+2, y)
 	} else {
 		t.cur.X = t.cols - 1
-		t.cur.State |= cursorWrapNext
+		if t.mode&ModeWrap != 0 {
+			t.cur.State |= cursorWrapNext
+		}
 	}
 }
 
@@ -169,8 +171,14 @@ func (t *State) putCell(c rune, extra string, w int) {
 	if x+w < t.cols {
 		t.moveTo(x+w, y)
 	} else {
+		// At the right margin. With autowrap on the cursor waits there and the
+		// next character wraps; with it off there is nothing to wait for, so
+		// turning autowrap on later does not wrap a character written before
+		// (xterm and tmux agree).
 		t.cur.X = t.cols - 1
-		t.cur.State |= cursorWrapNext
+		if t.mode&ModeWrap != 0 {
+			t.cur.State |= cursorWrapNext
+		}
 	}
 }
 

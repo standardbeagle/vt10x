@@ -338,3 +338,19 @@ func TestPrintableASCIIStaysNarrowAndSeparate(t *testing.T) {
 		t.Fatalf("cursor %v want %v", got, want)
 	}
 }
+
+// Turning autowrap on after characters were written at the right margin with it
+// off must not wrap the next character: there was never a pending wrap.
+func TestAutowrapOffLeavesNoPendingWrap(t *testing.T) {
+	term := New(WithSize(5, 3))
+	feed(t, term, "\x1b[?7l"+strings.Repeat("x", 8)+"\x1b[?7hyyy")
+	if got := cellDump(term, 0); got != "x|x|x|x|y" {
+		t.Errorf("row0 %q", got)
+	}
+	if got := cellDump(term, 1); got != "y|y" {
+		t.Errorf("row1 %q", got)
+	}
+	if got, want := cursorAt(term), [2]int{2, 1}; got != want {
+		t.Errorf("cursor %v want %v", got, want)
+	}
+}
