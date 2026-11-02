@@ -415,15 +415,17 @@ func (t *State) setChar(c rune, attr *Glyph, x, y int) {
 	if t.lines[y][x].Mode&(attrWide|attrWideCont) != 0 {
 		t.blankWidePair(y, x)
 	}
-	t.lines[y][x] = *attr
-	t.lines[y][x].Char = c
-	//if t.options.BrightBold && attr.Mode&attrBold != 0 && attr.FG < 8 {
+	// Copy the pen, then patch fields in place. Building the cell in a local
+	// and storing it whole is slower: the wide copy reloads fields just
+	// written narrowly, which store forwarding cannot serve.
+	cell := &t.lines[y][x]
+	*cell = *attr
+	cell.Char = c
 	if attr.Mode&attrBold != 0 && attr.FG < 8 {
-		t.lines[y][x].FG = attr.FG + 8
+		cell.FG = attr.FG + 8
 	}
 	if attr.Mode&attrReverse != 0 {
-		t.lines[y][x].FG = attr.BG
-		t.lines[y][x].BG = attr.FG
+		cell.FG, cell.BG = attr.BG, attr.FG
 	}
 }
 
@@ -531,6 +533,8 @@ func (t *State) clear(x0, y0, x1, y1 int) {
 	y0 = clamp(y0, 0, t.rows-1)
 	y1 = clamp(y1, 0, t.rows-1)
 	t.changed |= ChangedScreen
+	blank := t.cur.Attr
+	blank.Char = ' '
 	for y := y0; y <= y1; y++ {
 		t.dirty[y] = true
 		// A wide pair cut by the edge of the range loses its other half too.
@@ -541,10 +545,20 @@ func (t *State) clear(x0, y0, x1, y1 int) {
 		if line[x1].Mode&attrWide != 0 && x1+1 < t.cols {
 			t.blankCell(y, x1+1)
 		}
-		for x := x0; x <= x1; x++ {
-			t.lines[y][x] = t.cur.Attr
-			t.lines[y][x].Char = ' '
-		}
+		fillGlyphs(line[x0:x1+1], blank)
+	}
+}
+
+// fillGlyphs sets every cell of row to g. It stores one cell and doubles the
+// filled prefix with copy, so a row costs a few bulk moves rather than one
+// write-barriered struct store per cell.
+func fillGlyphs(row []Glyph, g Glyph) {
+	if len(row) == 0 {
+		return
+	}
+	row[0] = g
+	for n := 1; n < len(row); n *= 2 {
+		copy(row[n:], row[:n])
 	}
 }
 
