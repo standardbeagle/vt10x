@@ -446,7 +446,7 @@ func (t *State) reset() {
 	t.top = 0
 	t.bottom = t.rows - 1
 	t.mode = ModeWrap
-	t.clear(0, 0, t.rows-1, t.cols-1)
+	t.clearAll()
 	t.moveTo(0, 0)
 }
 
